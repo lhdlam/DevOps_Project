@@ -62,7 +62,7 @@ module "nat_gateway" {
 resource "aws_instance" "dev_machine" {
   ami = data.aws_ami.amazon-linux.id
   instance_type = "t2.micro"
-  key_name = "devops-jenkins"
+  key_name = "aws-key-pair"
   subnet_id     = module.vpc.private_sn_az1.id
 
   tags = {
