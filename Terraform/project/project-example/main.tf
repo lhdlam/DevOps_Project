@@ -12,11 +12,6 @@ data "aws_ami" "amazon-linux" {
   }
 }
 
-provider "aws" {
-  region  = var.project_aws_region
-  profile = var.project_aws_profile
-}
-
 locals {
   common_tags = {
     ProjectName = var.project_name
