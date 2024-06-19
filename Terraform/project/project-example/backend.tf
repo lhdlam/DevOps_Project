@@ -1,7 +1,7 @@
 terraform {
   backend "s3" {
-    bucket = "devops-project-terraform-state-backend"
-    key = "devops/statefile"
+    bucket = "jenkins-dev1-terraform-state-backend"
+    key = "jenkins/statefile"
     region = "us-east-1"
   }
 }  

@@ -87,7 +87,7 @@ module "nat_gateway" {
 
 
 resource "aws_instance" "dev_machine" {
-  ami = data.aws_ami.amazon-linux.id
+  ami = data.aws_ami.amz2023.id
   instance_type = "t2.micro"
   key_name = "aws-key-pair"
   subnet_id     = module.vpc.public_sn_az1.id
