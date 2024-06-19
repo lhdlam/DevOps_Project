@@ -38,7 +38,7 @@ module "vpc" {
 
 resource "aws_security_group" "devops_sg" {
   name_prefix = "jenkins_sg_"
-  vpc_id      = module.vpc.vpc_id
+  vpc_id      = module.vpc.vpc.id
   ingress {
     from_port   = 22
     to_port     = 22
