@@ -35,6 +35,33 @@ module "vpc" {
   vpc_cidr = var.vpc_cidr
 }
 
+
+resource "aws_security_group" "devops_sg" {
+  name_prefix = "jenkins_sg_"
+  vpc_id      = module.vpc.vpc_id
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+
 # Create NAT gateway and assign eip
 module "nat_eip" {
   source       = "../../modules/elastic-ip/for-nat"
@@ -64,6 +91,8 @@ resource "aws_instance" "dev_machine" {
   instance_type = "t2.micro"
   key_name = "aws-key-pair"
   subnet_id     = module.vpc.public_sn_az1.id
+  vpc_security_group_ids = [aws_security_group.devops_sg.id]
+
 
   tags = {
     Environment = "dev"
