@@ -7,175 +7,94 @@
     ansible_ssh_private_key_file: "/etc/ansible/aws-key-pair.pem"  
     ansible_ssh_user: "ec2-user"
   tasks:
-  - name: Update package index and install required packages
-    apt:
-      update_cache: yes
-      name: 
-        - apache2
-        - unzip
-        - software-properties-common
+  - name: upgrade all packages
+    yum:
+      name: '*'
+      state: latest
+  - name: Enable EPEL Repository on CentOS 8
+    dnf:
+      name: epel-release
+      state: latest
+    when: ansible_facts['os_family'] == 'RedHat' and ansible_facts ['distribution_major_version'] == '8'
+  - name: Enable EPEL Repository on CentOS 7
+    yum:
+      name: epel-release
+      state: latest
+    when: ansible_facts['os_family'] == 'RedHat' and ansible_facts ['distribution_major_version'] == '7'
+  - name: ensure a list of packages installed
+    yum:
       state: present
-
-  - name: Add deadsnakes PPA
-    apt_repository:
-      repo: ppa:deadsnakes/ppa
-      state: present
-      update_cache: yes
-
-  - name: Install Python 3.9 and virtual environment package
-    apt:
       name:
-        - python3.9
-        - python3.9-venv
-      state: present
-
-  - name: Clone repository
-    git:
-      repo: https://github.com/lhdlam/Django-ECommerce-2024.git
-      dest: /home/ubuntu/Django-ECommerce-2024
-      clone: yes
-      update: no
-
-  - name: Create virtual environment
-    command: python3.9 -m venv /home/ubuntu/Django-ECommerce-2024/venv
-    args:
-      creates: /home/ubuntu/Django-ECommerce-2024/venv
-
-  - name: Activate virtual environment and install dependencies
-    pip:
-      requirements: /home/ubuntu/Django-ECommerce-2024/requirements.txt
-      virtualenv: /home/ubuntu/Django-ECommerce-2024/venv
-
-  - name: Install Gunicorn
-    pip:
-      name: gunicorn
-      virtualenv: /home/ubuntu/Django-ECommerce-2024/venv
-
-  - name: Create directory for Gunicorn logs
-    file:
-      path: /var/log/gunicorn
-      state: directory
-
-  - name: Create Gunicorn socket file
-    copy:
-      dest: /etc/systemd/system/gunicorn.socket
-      content: |
-        [Unit]
-        Description=gunicorn socket
-
-        [Socket]
-        ListenStream=/run/gunicorn.sock
-
-        [Install]
-        WantedBy=sockets.target
-
-  - name: Create Gunicorn service file
-    copy:
-      dest: /etc/systemd/system/gunicorn.service
-      content: |
-        [Unit]
-        Description=gunicorn daemon
-        After=network.target
-
-        [Service]
-        User=ubuntu
-        Group=www-data
-        WorkingDirectory=/home/ubuntu/Django-ECommerce-2024
-        ExecStart=/home/ubuntu/Django-ECommerce-2024/venv/bin/gunicorn \
-                  --access-logfile - \
-                  --workers 3 \
-                  --bind unix:/run/gunicorn.sock \
-                  demo.wsgi:application
-
-        [Install]
-        WantedBy=multi-user.target
-
-  - name: Start and enable Gunicorn socket
-    systemd:
-      name: gunicorn.socket
+        - firewalld
+        - mariadb-server
+        - httpd
+        - php
+        - php-mysql
+        - git
+        - epel-release
+        - python-pip
+        - python-devel
+        - mysql-devel
+        - gcc
+        - MySQL-python
+  - name: Ensure services are running
+    service:
+      name: "{{item}}"
       state: started
       enabled: yes
-      daemon_reload: yes
-
-  - name: Restart Gunicorn service
-    systemd:
-      name: gunicorn
-      state: restarted
-      daemon_reload: yes
-
-  - name: Install Nginx
-    apt:
-      name: nginx
-      state: present
-
-  - name: Run Django collectstatic command
-    command: python manage.py collectstatic --noinput
-    args:
-      chdir: /home/ubuntu/Django-ECommerce-2024
-      creates: /home/ubuntu/Django-ECommerce-2024/static
-
-  - name: Add www-data user to ubuntu group
-    user:
-      name: www-data
-      groups: ubuntu
-      append: yes
-
-  - name: Fetch public IPv4 address using IMDSv2
-    set_fact:
-      token: "{{ lookup('community.general.http', 'http://169.254.169.254/latest/api/token', headers={'X-aws-ec2-metadata-token-ttl-seconds': '21600'}, method='PUT') }}"
-      public_ip: "{{ lookup('community.general.http', 'http://169.254.169.254/latest/meta-data/public-ipv4', headers={'X-aws-ec2-metadata-token': token}) }}"
-
-  - name: Create Nginx server block file
-    template:
-      dest: /etc/nginx/sites-available/django_website
-      content: |
-        server {
-            listen 80;
-            server_name {{ public_ip }};
-
-            location = /favicon.ico { access_log off; log_not_found off; }
-
-            location / {
-                include proxy_params;
-                proxy_pass http://unix:/run/gunicorn.sock;
-            }
-
-            location  /static/ {
-                root /home/ubuntu/Django-ECommerce-2024;
-                access_log off;
-            }
-
-            location  /media/ {
-                root /home/ubuntu/Django-ECommerce-2024;
-                access_log off;
-            }
-        }
-
-  - name: Enable Nginx server block
-    file:
-      src: /etc/nginx/sites-available/django_website
-      dest: /etc/nginx/sites-enabled/django_website
-      state: link
-
-  - name: Stop Apache2 service
-    service:
-      name: apache2
-      state: stopped
-
-  - name: Remove default Nginx site
-    file:
-      path: /etc/nginx/sites-enabled/default
+    with_items:
+        - firewalld
+        - mariadb
+  - name: Configure firewall for Database
+    command: "{{item}}"
+    with_items:
+        - firewall-cmd --permanent --zone=public --add-port=3306/tcp
+        - firewall-cmd --reload
+  - name: Clone repository to /var/www/html/
+    git:
+      repo: https://github.com/kodekloudhub/learning-app-ecommerce.git
+      dest: /var/www/html/
+      force: true
+  - name: Make sure there is neither a database with name 'ecomdb', nor one with name 'test'
+    mysql_db:
+      name: test
       state: absent
-
-  - name: Restart Nginx
-    systemd:
-      name: nginx
-      state: restarted
-
-  - name: Allow Nginx through firewall
-    ufw:
-      rule: allow
-      name: 'Nginx Full'
-
-  - name: Reload Nginx
-    command: nginx -s reload
+  - name: Create a new database with name 'ecomdb'
+    mysql_db:
+      name: ecomdb
+      state: present
+    notify:
+      - Import db-load-script.sql
+  - name: Create a new user with name 'ecomdb'
+    mysql_user:
+      name: ecomuser
+      host: localhost
+      password: ecompassword
+      priv: '*.*:ALL'
+      state: present
+  - name: Configure firewall for Web
+    command: "{{item}}"
+    with_items:
+        - firewall-cmd --permanent --zone=public --add-port=80/tcp
+        - firewall-cmd --reload
+  - name: Change DirectoryIndex index.html to DirectoryIndex index.php to make the php page the default page
+    replace:
+      path: /etc/httpd/conf/httpd.conf
+      regexp: "DirectoryIndex index.html"
+      replace: "DirectoryIndex index.php"
+  - name: Ensure httpd service are running
+    service:
+      name: "httpd"
+      state: started
+      enabled: yes
+  - name: Change DirectoryIndex index.html to DirectoryIndex index.php to make the php page the default page
+    replace:
+      path: /var/www/html/index.php
+      regexp: '172.20.1.101'
+      replace: 'localhost'
+handlers:
+  - name: Import db-load-script.sql
+    mysql_db:
+      state: import
+      name: ecomdb
+      target: /var/www/html/assets/db-load-script.sql
