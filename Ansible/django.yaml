@@ -1,0 +1,178 @@
+---
+- name: Set up Django ECommerce application
+  hosts: all
+  become: yes
+  tasks:
+
+    - name: Update package index and install required packages
+      apt:
+        update_cache: yes
+        name: 
+          - apache2
+          - unzip
+          - software-properties-common
+        state: present
+
+    - name: Add deadsnakes PPA
+      apt_repository:
+        repo: ppa:deadsnakes/ppa
+        state: present
+        update_cache: yes
+
+    - name: Install Python 3.9 and virtual environment package
+      apt:
+        name:
+          - python3.9
+          - python3.9-venv
+        state: present
+
+    - name: Clone repository
+      git:
+        repo: https://github.com/lhdlam/Django-ECommerce-2024.git
+        dest: /home/ubuntu/Django-ECommerce-2024
+        clone: yes
+        update: no
+
+    - name: Create virtual environment
+      command: python3.9 -m venv /home/ubuntu/Django-ECommerce-2024/venv
+      args:
+        creates: /home/ubuntu/Django-ECommerce-2024/venv
+
+    - name: Activate virtual environment and install dependencies
+      pip:
+        requirements: /home/ubuntu/Django-ECommerce-2024/requirements.txt
+        virtualenv: /home/ubuntu/Django-ECommerce-2024/venv
+
+    - name: Install Gunicorn
+      pip:
+        name: gunicorn
+        virtualenv: /home/ubuntu/Django-ECommerce-2024/venv
+
+    - name: Create directory for Gunicorn logs
+      file:
+        path: /var/log/gunicorn
+        state: directory
+
+    - name: Create Gunicorn socket file
+      copy:
+        dest: /etc/systemd/system/gunicorn.socket
+        content: |
+          [Unit]
+          Description=gunicorn socket
+
+          [Socket]
+          ListenStream=/run/gunicorn.sock
+
+          [Install]
+          WantedBy=sockets.target
+
+    - name: Create Gunicorn service file
+      copy:
+        dest: /etc/systemd/system/gunicorn.service
+        content: |
+          [Unit]
+          Description=gunicorn daemon
+          After=network.target
+
+          [Service]
+          User=ubuntu
+          Group=www-data
+          WorkingDirectory=/home/ubuntu/Django-ECommerce-2024
+          ExecStart=/home/ubuntu/Django-ECommerce-2024/venv/bin/gunicorn \
+                    --access-logfile - \
+                    --workers 3 \
+                    --bind unix:/run/gunicorn.sock \
+                    demo.wsgi:application
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Start and enable Gunicorn socket
+      systemd:
+        name: gunicorn.socket
+        state: started
+        enabled: yes
+        daemon_reload: yes
+
+    - name: Restart Gunicorn service
+      systemd:
+        name: gunicorn
+        state: restarted
+        daemon_reload: yes
+
+    - name: Install Nginx
+      apt:
+        name: nginx
+        state: present
+
+    - name: Run Django collectstatic command
+      command: python manage.py collectstatic --noinput
+      args:
+        chdir: /home/ubuntu/Django-ECommerce-2024
+        creates: /home/ubuntu/Django-ECommerce-2024/static
+
+    - name: Add www-data user to ubuntu group
+      user:
+        name: www-data
+        groups: ubuntu
+        append: yes
+
+    - name: Fetch public IPv4 address using IMDSv2
+      set_fact:
+        token: "{{ lookup('community.general.http', 'http://169.254.169.254/latest/api/token', headers={'X-aws-ec2-metadata-token-ttl-seconds': '21600'}, method='PUT') }}"
+        public_ip: "{{ lookup('community.general.http', 'http://169.254.169.254/latest/meta-data/public-ipv4', headers={'X-aws-ec2-metadata-token': token}) }}"
+
+    - name: Create Nginx server block file
+      template:
+        dest: /etc/nginx/sites-available/django_website
+        content: |
+          server {
+              listen 80;
+              server_name {{ public_ip }};
+
+              location = /favicon.ico { access_log off; log_not_found off; }
+
+              location / {
+                  include proxy_params;
+                  proxy_pass http://unix:/run/gunicorn.sock;
+              }
+
+              location  /static/ {
+                  root /home/ubuntu/Django-ECommerce-2024;
+                  access_log off;
+              }
+
+              location  /media/ {
+                  root /home/ubuntu/Django-ECommerce-2024;
+                  access_log off;
+              }
+          }
+
+    - name: Enable Nginx server block
+      file:
+        src: /etc/nginx/sites-available/django_website
+        dest: /etc/nginx/sites-enabled/django_website
+        state: link
+
+    - name: Stop Apache2 service
+      service:
+        name: apache2
+        state: stopped
+
+    - name: Remove default Nginx site
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+
+    - name: Restart Nginx
+      systemd:
+        name: nginx
+        state: restarted
+
+    - name: Allow Nginx through firewall
+      ufw:
+        rule: allow
+        name: 'Nginx Full'
+
+    - name: Reload Nginx
+      command: nginx -s reload
