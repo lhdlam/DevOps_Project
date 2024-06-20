@@ -7,26 +7,53 @@
     ansible_ssh_private_key_file: "/etc/ansible/aws-key-pair.pem"  
     ansible_ssh_user: "ec2-user"
   tasks:
-  - name: "Install httpd and php packages"
-    package:
-        name:
-          - "httpd"
-          - "php"
+    - name: Install Apache
+      yum:
+        name: httpd
         state: present
-  - name: "copy code from GitHub"
-    get_url:
-        url: https://www.shubhammishra.in
-        dest: "/var/www/html/index.php"
-  - name: "Start httpd services"
-    service:
+        update_cache: yes
+
+    - name: Start and enable Apache service
+      systemd:
         name: httpd
         state: started
-  - name: Yum Install Packages
-    yum: name={{item}} state=latest
-    with_items:
-       - wget
-  - name: terraform install
-    unarchive:
-      src: https://releases.hashicorp.com/terraform/0.9.1/terraform_0.9.1_linux_amd64.zip
-      dest: /usr/bin
-      remote_src: True
+        enabled: yes
+
+    - name: Create web root directory
+      file:
+        path: /var/www/html
+        state: directory
+        owner: apache
+        group: apache
+        mode: '0755'
+
+    - name: Create a simple index.html
+      copy:
+        dest: /var/www/html/index.html
+        content: |
+          <!DOCTYPE html>
+          <html>
+          <head>
+              <title>Welcome to My Website</title>
+          </head>
+          <body>
+              <h1>Hello World!</h1>
+              <p>This is a simple static website served by Apache.</p>
+          </body>
+          </html>
+        owner: apache
+        group: apache
+        mode: '0644'
+
+    - name: Allow HTTP traffic through the firewall
+      firewalld:
+        service: http
+        permanent: yes
+        state: enabled
+        immediate: yes
+
+    - name: Ensure firewall is running
+      systemd:
+        name: firewalld
+        state: started
+        enabled: yes
