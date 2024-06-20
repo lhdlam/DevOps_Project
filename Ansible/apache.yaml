@@ -26,7 +26,25 @@
         state: latest
       when: ansible_facts['os_family'] == 'RedHat' and ansible_facts['distribution_major_version'] == '7'
 
-    - name: Ensure a list of packages installed
+    - name: Ensure a list of packages installed on CentOS 8
+      yum:
+        name:
+          - firewalld
+          - mariadb-server
+          - httpd
+          - php
+          - php-mysqlnd
+          - git
+          - epel-release
+          - python3-pip
+          - python3-devel
+          - mysql-devel
+          - gcc
+          - python3-PyMySQL
+        state: present
+      when: ansible_facts['os_family'] == 'RedHat' and ansible_facts['distribution_major_version'] == '8'
+
+    - name: Ensure a list of packages installed on CentOS 7
       yum:
         name:
           - firewalld
@@ -38,10 +56,11 @@
           - epel-release
           - python-pip
           - python-devel
-          - mysql-devel
+          - mariadb-devel
           - gcc
           - MySQL-python
         state: present
+      when: ansible_facts['os_family'] == 'RedHat' and ansible_facts['distribution_major_version'] == '7'
 
     - name: Ensure services are running
       service:
