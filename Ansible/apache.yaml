@@ -40,13 +40,165 @@
         dest: /var/www/html/index.html
         content: |
           <!DOCTYPE html>
-          <html>
+          <html lang="en">
           <head>
-              <title>Welcome to My Website</title>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>Beautiful Home Page</title>
+              <link rel="stylesheet" href="styles.css">
+              <style>
+                  * {
+                      margin: 0;
+                      padding: 0;
+                      box-sizing: border-box;
+                  }
+
+                  body {
+                      font-family: 'Arial', sans-serif;
+                      line-height: 1.6;
+                      background: linear-gradient(to right, #ffecd2, #fcb69f);
+                      color: #333;
+                  }
+
+                  header {
+                      background: #1a2a6c;
+                      color: #fff;
+                      padding-top: 30px;
+                      min-height: 70px;
+                      border-bottom: #fdbb2d 3px solid;
+                  }
+
+                  nav {
+                      display: flex;
+                      justify-content: space-between;
+                      align-items: center;
+                      padding: 0 20px;
+                  }
+
+                  .logo {
+                      font-size: 1.5rem;
+                      font-weight: bold;
+                      color: #fdbb2d;
+                  }
+
+                  .nav-links {
+                      list-style: none;
+                  }
+
+                  .nav-links li {
+                      display: inline;
+                      padding: 0 10px;
+                  }
+
+                  .nav-links a {
+                      color: #fff;
+                      text-decoration: none;
+                      font-weight: bold;
+                  }
+
+                  .nav-links a:hover {
+                      color: #fdbb2d;
+                  }
+
+                  .hero {
+                      text-align: center;
+                      padding: 100px 20px;
+                  }
+
+                  .hero h1 {
+                      font-size: 3rem;
+                      margin-bottom: 20px;
+                      color: #1a2a6c;
+                  }
+
+                  .hero p {
+                      font-size: 1.2rem;
+                      margin-bottom: 30px;
+                      color: #1a2a6c;
+                  }
+
+                  .cta {
+                      background: #fdbb2d;
+                      color: #1a2a6c;
+                      padding: 10px 20px;
+                      text-decoration: none;
+                      font-size: 1.2rem;
+                      border-radius: 5px;
+                  }
+
+                  .cta:hover {
+                      background: #f39c12;
+                  }
+
+                  .features {
+                      display: flex;
+                      justify-content: space-around;
+                      padding: 20px;
+                  }
+
+                  .feature {
+                      background: #fff;
+                      padding: 20px;
+                      border-radius: 10px;
+                      box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+                      flex: 1;
+                      margin: 10px;
+                      text-align: center;
+                  }
+
+                  .feature h2 {
+                      margin-bottom: 20px;
+                      font-size: 1.5rem;
+                      color: #1a2a6c;
+                  }
+
+                  footer {
+                      text-align: center;
+                      padding: 20px;
+                      background: #1a2a6c;
+                      color: #fff;
+                      position: absolute;
+                      bottom: 0;
+                      width: 100%;
+                  }
+              </style>
           </head>
           <body>
-              <h1>Hello World!</h1>
-              <p>This is a simple static website served by Apache.</p>
+              <header>
+                  <nav>
+                      <div class="logo">MySite</div>
+                      <ul class="nav-links">
+                          <li><a href="#">Home</a></li>
+                          <li><a href="#">About</a></li>
+                          <li><a href="#">Services</a></li>
+                          <li><a href="#">Contact</a></li>
+                      </ul>
+                  </nav>
+                  <div class="hero">
+                      <h1>Welcome to MySite</h1>
+                      <p>Your one-stop solution for all your needs.</p>
+                      <a href="#" class="cta">Get Started</a>
+                  </div>
+              </header>
+              <main>
+                  <section class="features">
+                      <div class="feature">
+                          <h2>Feature One</h2>
+                          <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit.</p>
+                      </div>
+                      <div class="feature">
+                          <h2>Feature Two</h2>
+                          <p>Suspendisse potenti. In faucibus massa arcu, vitae cursus mi hendrerit nec.</p>
+                      </div>
+                      <div class="feature">
+                          <h2>Feature Three</h2>
+                          <p>Quisque aliquam eros nec urna efficitur, quis porta dui tristique.</p>
+                      </div>
+                  </section>
+              </main>
+              <footer>
+                  <p>&copy; 2024 MySite. All rights reserved.</p>
+              </footer>
           </body>
           </html>
         owner: apache
