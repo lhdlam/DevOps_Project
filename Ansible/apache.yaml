@@ -62,14 +62,17 @@
         state: present
       when: ansible_facts['os_family'] == 'RedHat' and ansible_facts['distribution_major_version'] == '7'
 
-    - name: Ensure services are running
+    - name: Ensure firewalld service is running
       service:
-        name: "{{ item }}"
+        name: firewalld
         state: started
         enabled: yes
-      loop:
-        - firewalld
-        - mariadb
+
+    - name: Ensure mariadb service is running
+      service:
+        name: mariadb
+        state: started
+        enabled: yes
 
     - name: Configure firewall for Database
       command: "{{ item }}"
