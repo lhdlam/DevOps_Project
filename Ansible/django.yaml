@@ -6,7 +6,7 @@
   vars:
     ansible_ssh_private_key_file: "/etc/ansible/aws-key-pair.pem"  
     ansible_ssh_user: "ec2-user"
-    
+
   tasks:
     - name: Update package index and install dependencies
       yum:
@@ -123,7 +123,7 @@
     - name: Create Nginx server block file
       template:
         dest: /etc/nginx/conf.d/django_website.conf
-        src: templates/django_website.conf.j2
+        src: /var/lib/jenkins/workspace/jenkins-project/Ansible/template/django_website.conf.j2
       vars:
         public_ip: "{{ public_ip.content }}"
 
