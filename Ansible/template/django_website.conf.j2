@@ -1,0 +1,21 @@
+server {
+    listen 80;
+    server_name {{ public_ip }};
+
+    location = /favicon.ico { access_log off; log_not_found off; }
+
+    location / {
+        include /etc/nginx/proxy_params;
+        proxy_pass http://unix:/run/gunicorn.sock;
+    }
+
+    location /static/ {
+        alias /home/ec2-user/Django-ECommerce-2024/static/;
+        access_log off;
+    }
+
+    location /media/ {
+        alias /home/ec2-user/Django-ECommerce-2024/media/;
+        access_log off;
+    }
+}
