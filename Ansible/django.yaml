@@ -1,29 +1,3 @@
-- name: Ensure boto3 and botocore are installed
-  hosts: aws_ec2
-  become: yes
-  remote_user: ec2-user
-  gather_facts: true
-  vars:
-    ansible_ssh_private_key_file: "/etc/ansible/aws-key-pair.pem"  
-    ansible_ssh_user: "ec2-user"
-
-  tasks:
-    - name: Install pip
-      yum:
-        name: python3-pip
-        state: present
-      become: yes
-
-    - name: Install boto3 and botocore
-      pip:
-        name: 
-          - boto3
-          - botocore
-        state: present
-      become: yes
-
-
-
 - name: This sets up an httpd webserver
   hosts: aws_ec2
   become: yes
@@ -45,12 +19,6 @@
           - nginx
         state: present
         update_cache: yes
-
-    - name: Fetching the token for IMDSv2
-      shell: |
-        TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
-        echo $TOKEN
-      register: imds_token
 
     - name: Clone repository
       git:
@@ -139,16 +107,27 @@
         groups: ec2-user
         append: yes
 
-    - name: Get public IPv4 address
+    - name: Get EC2 metadata token
+      uri:
+        url: http://169.254.169.254/latest/api/token
+        method: PUT
+        headers:
+          X-aws-ec2-metadata-token-ttl-seconds: '21600'
+        return_content: yes
+      register: token_response
+
+    - name: Get public IPv4 using token
       uri:
         url: http://169.254.169.254/latest/meta-data/public-ipv4
+        method: GET
         headers:
-          X-aws-ec2-metadata-token: "{{ imds_token.stdout }}"
-      register: public_ip
+          X-aws-ec2-metadata-token: "{{ token_response.content }}"
+        return_content: yes
+      register: public_ip_response
 
     - name: Debug public_ip
       debug:
-        var: public_ip
+        var: public_ip_response
 
     - name: Create Nginx server block file
       template:
@@ -156,15 +135,7 @@
         src: /var/lib/jenkins/workspace/jenkins-project/Ansible/template/django_website.conf.j2
         mode: 0644
       vars:
-        django_server_ip: "{{ public_ip.stdout }}"
-
-    - name: Create Nginx server block file
-      template:
-        dest: /etc/nginx/conf.d/django_website.conf
-        src: /var/lib/jenkins/workspace/jenkins-project/Ansible/template/django_website.conf.j2
-        mode: 0644
-      vars:
-        public_ip: "{{ django_server_ip }}"
+        django_server_ip: "{{ public_ip_response.content }}"
 
     - name: Disable the default server block
       file:
