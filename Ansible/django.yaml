@@ -139,23 +139,24 @@
         groups: ec2-user
         append: yes
 
-    # - name: Get public IPv4 address
-    #   uri:
-    #     url: http://169.254.169.254/latest/meta-data/public-ipv4
-    #     headers:
-    #       X-aws-ec2-metadata-token: "{{ imds_token.stdout }}"
-    #   register: public_ip
+    - name: Get public IPv4 address
+      uri:
+        url: http://169.254.169.254/latest/meta-data/public-ipv4
+        headers:
+          X-aws-ec2-metadata-token: "{{ imds_token.stdout }}"
+      register: public_ip
 
-    - name: Get IP address of the EC2 instance
-      amazon.aws.ec2_instance_info:
-        region: us-east-1
-        filters:
-          "tag:Name": "DjangoServer"
-      register: ec2_info
+    - name: Debug public_ip
+      debug:
+        var: public_ip
 
-    - name: Set the Django server IP
-      set_fact:
-        django_server_ip: "{{ ec2_info.instances[0].public_ip_address }}"
+    - name: Create Nginx server block file
+      template:
+        dest: /etc/nginx/conf.d/django_website.conf
+        src: /var/lib/jenkins/workspace/jenkins-project/Ansible/template/django_website.conf.j2
+        mode: 0644
+      vars:
+        django_server_ip: "{{ public_ip.stdout }}"
 
     - name: Create Nginx server block file
       template:
