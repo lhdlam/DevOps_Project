@@ -6,58 +6,53 @@
   vars:
     ansible_ssh_private_key_file: "/etc/ansible/aws-key-pair.pem"  
     ansible_ssh_user: "ec2-user"
+    
   tasks:
-
-    - name: Update package index and install required packages
-      apt:
-        update_cache: yes
-        name: 
-          - apache2
-          - unzip
-          - software-properties-common
-        state: present
-
-    - name: Add deadsnakes PPA
-      apt_repository:
-        repo: ppa:deadsnakes/ppa
-        state: present
-        update_cache: yes
-
-    - name: Install Python 3.9 and virtual environment package
-      apt:
+    - name: Update package index and install dependencies
+      yum:
         name:
-          - python3.9
-          - python3.9-venv
+          - httpd
+          - unzip
+          - python3
+          - python3-virtualenv
+          - git
+          - nginx
         state: present
+        update_cache: yes
+
+    - name: Fetching the token for IMDSv2
+      shell: |
+        TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+        echo $TOKEN
+      register: imds_token
 
     - name: Clone repository
       git:
         repo: https://github.com/lhdlam/Django-ECommerce-2024.git
-        dest: /home/ubuntu/Django-ECommerce-2024
-        clone: yes
-        update: no
+        dest: /home/ec2-user/Django-ECommerce-2024
+        force: yes
 
     - name: Create virtual environment
-      command: python3.9 -m venv /home/ubuntu/Django-ECommerce-2024/venv
+      command: python3 -m venv /home/ec2-user/Django-ECommerce-2024/venv
       args:
-        creates: /home/ubuntu/Django-ECommerce-2024/venv
+        creates: /home/ec2-user/Django-ECommerce-2024/venv
 
-    - name: Activate virtual environment and install dependencies
+    - name: Install Python dependencies
       pip:
-        requirements: /home/ubuntu/Django-ECommerce-2024/requirements.txt
-        virtualenv: /home/ubuntu/Django-ECommerce-2024/venv
+        requirements: /home/ec2-user/Django-ECommerce-2024/requirements.txt
+        virtualenv: /home/ec2-user/Django-ECommerce-2024/venv
 
     - name: Install Gunicorn
       pip:
         name: gunicorn
-        virtualenv: /home/ubuntu/Django-ECommerce-2024/venv
+        virtualenv: /home/ec2-user/Django-ECommerce-2024/venv
 
     - name: Create directory for Gunicorn logs
       file:
         path: /var/log/gunicorn
         state: directory
 
-    - name: Create Gunicorn socket file
+    - name: Create gunicorn socket file
       copy:
         dest: /etc/systemd/system/gunicorn.socket
         content: |
@@ -70,7 +65,7 @@
           [Install]
           WantedBy=sockets.target
 
-    - name: Create Gunicorn service file
+    - name: Create gunicorn service file
       copy:
         dest: /etc/systemd/system/gunicorn.service
         content: |
@@ -79,104 +74,108 @@
           After=network.target
 
           [Service]
-          User=ubuntu
-          Group=www-data
-          WorkingDirectory=/home/ubuntu/Django-ECommerce-2024
-          ExecStart=/home/ubuntu/Django-ECommerce-2024/venv/bin/gunicorn \
-                    --access-logfile - \
-                    --workers 3 \
-                    --bind unix:/run/gunicorn.sock \
-                    demo.wsgi:application
+          User=ec2-user
+          Group=nginx
+          WorkingDirectory=/home/ec2-user/Django-ECommerce-2024
+          ExecStart=/home/ec2-user/Django-ECommerce-2024/venv/bin/gunicorn \
+                  --access-logfile - \
+                  --workers 3 \
+                  --bind unix:/run/gunicorn.sock \
+                  demo.wsgi:application
 
           [Install]
           WantedBy=multi-user.target
 
-    - name: Start and enable Gunicorn socket
+    - name: Start and enable gunicorn socket
       systemd:
         name: gunicorn.socket
         state: started
         enabled: yes
         daemon_reload: yes
 
-    - name: Restart Gunicorn service
-      systemd:
-        name: gunicorn
-        state: restarted
-        daemon_reload: yes
-
-    - name: Install Nginx
-      apt:
-        name: nginx
-        state: present
+    - name: Create proxy_params file for Nginx
+      copy:
+        dest: /etc/nginx/proxy_params
+        content: |
+          proxy_set_header Host $host;
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Proto $scheme;
 
     - name: Run Django collectstatic command
-      command: python manage.py collectstatic --noinput
+      command: /home/ec2-user/Django-ECommerce-2024/venv/bin/python /home/ec2-user/Django-ECommerce-2024/manage.py collectstatic --noinput
       args:
-        chdir: /home/ubuntu/Django-ECommerce-2024
-        creates: /home/ubuntu/Django-ECommerce-2024/static
+        chdir: /home/ec2-user/Django-ECommerce-2024
 
-    - name: Add www-data user to ubuntu group
+    - name: Add nginx user to ec2-user group
       user:
-        name: www-data
-        groups: ubuntu
+        name: nginx
+        groups: ec2-user
         append: yes
 
-    - name: Fetch public IPv4 address using IMDSv2
-      set_fact:
-        token: "{{ lookup('community.general.http', 'http://169.254.169.254/latest/api/token', headers={'X-aws-ec2-metadata-token-ttl-seconds': '21600'}, method='PUT') }}"
-        public_ip: "{{ lookup('community.general.http', 'http://169.254.169.254/latest/meta-data/public-ipv4', headers={'X-aws-ec2-metadata-token': token}) }}"
+    - name: Get public IPv4 address
+      uri:
+        url: http://169.254.169.254/latest/meta-data/public-ipv4
+        headers:
+          X-aws-ec2-metadata-token: "{{ imds_token.stdout }}"
+      register: public_ip
 
     - name: Create Nginx server block file
       template:
-        dest: /etc/nginx/sites-available/django_website
+        dest: /etc/nginx/conf.d/django_website.conf
+        src: templates/django_website.conf.j2
+      vars:
+        public_ip: "{{ public_ip.content }}"
+
+    - name: Disable the default server block
+      file:
+        path: /etc/nginx/nginx.conf
+        state: absent
+
+    - name: Create a new default server block
+      copy:
+        dest: /etc/nginx/nginx.conf
         content: |
-          server {
-              listen 80;
-              server_name {{ public_ip }};
+          user ec2-user;
+          worker_processes auto;
+          error_log /var/log/nginx/error.log;
+          pid /run/nginx.pid;
 
-              location = /favicon.ico { access_log off; log_not_found off; }
-
-              location / {
-                  include proxy_params;
-                  proxy_pass http://unix:/run/gunicorn.sock;
-              }
-
-              location  /static/ {
-                  root /home/ubuntu/Django-ECommerce-2024;
-                  access_log off;
-              }
-
-              location  /media/ {
-                  root /home/ubuntu/Django-ECommerce-2024;
-                  access_log off;
-              }
+          events {
+              worker_connections 1024;
           }
 
-    - name: Enable Nginx server block
-      file:
-        src: /etc/nginx/sites-available/django_website
-        dest: /etc/nginx/sites-enabled/django_website
-        state: link
+          http {
+              include /etc/nginx/mime.types;
+              default_type application/octet-stream;
+              log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+                            '$status $body_bytes_sent "$http_referer" '
+                            '"$http_user_agent" "$http_x_forwarded_for"';
+              access_log /var/log/nginx/access.log main;
+              sendfile on;
+              tcp_nopush on;
+              tcp_nodelay on;
+              keepalive_timeout 65;
+              types_hash_max_size 2048;
 
-    - name: Stop Apache2 service
-      service:
-        name: apache2
-        state: stopped
-
-    - name: Remove default Nginx site
-      file:
-        path: /etc/nginx/sites-enabled/default
-        state: absent
+              include /etc/nginx/conf.d/*.conf;
+          }
 
     - name: Restart Nginx
       systemd:
         name: nginx
         state: restarted
 
-    - name: Allow Nginx through firewall
-      ufw:
-        rule: allow
-        name: 'Nginx Full'
+    # - name: Allow Nginx through firewall
+    #   firewalld:
+    #     port: 
+    #       - "80/tcp"
+    #       - "443/tcp"
+    #     permanent: yes
+    #     state: enabled
 
-    - name: Reload Nginx
-      command: nginx -s reload
+  handlers:
+    - name: reload nginx
+      systemd:
+        name: nginx
+        state: reloaded
